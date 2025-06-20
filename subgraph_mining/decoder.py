@@ -172,9 +172,16 @@ def pattern_growth(dataset, task, args):
                                 nx.connected_components(subgraph), key=len))
                         
                         orig_attrs = {n: subgraph.nodes[n].copy() for n in subgraph.nodes()}
-                        edge_attrs = {(u,v): subgraph.edges[u,v].copy() 
-                                    for u,v in subgraph.edges()}
-                        
+                        def clean_edge_attrs(attrs):
+                                 return {k: v for k, v in attrs.items() if isinstance(v, (int, float, str))}
+                        edge_attrs = {}
+                        for u, v in subgraph.edges():
+                                       try:
+                                           raw_attrs = subgraph.edges[u, v]
+                                           clean_attrs = clean_edge_attrs(raw_attrs)
+                                           edge_attrs[(u, v)] = clean_attrs
+                                       except Exception as e:
+                                                print(f"Skipping edge ({u}, {v}) due to bad attributes: {e}")
                         mapping = {old: new for new, old in enumerate(subgraph.nodes())}
                         subgraph = nx.relabel_nodes(subgraph, mapping)
                         
