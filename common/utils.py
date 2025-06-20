@@ -272,41 +272,59 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
             node_data['id'] = str(node)
     
     return g
-
 def batch_nx_graphs(graphs, anchors=None):
-    # Initialize feature augmenter
+    from torch_geometric.data import Batch
+    from deepsnap.hetero_graph import HeteroGraph  # or DSGraph, based on your setup
+
     augmenter = feature_preprocess.FeatureAugment()
-    
-    # Process graphs with proper attribute handling
     processed_graphs = []
+
+    def clean_attributes(attrs):
+        # Keep only simple key-value types
+        return {k: v for k, v in attrs.items() if isinstance(k, str) and isinstance(v, (int, float, str))}
+
     for i, graph in enumerate(graphs):
         anchor = anchors[i] if anchors is not None else None
         try:
-            # Standardize graph attributes
+            # Clean node attributes
+            for node in graph.nodes():
+                graph.nodes[node] = clean_attributes(graph.nodes[node])
+
+            # Clean edge attributes
+            for u, v in graph.edges():
+                graph.edges[u, v] = clean_attributes(graph.edges[u, v])
+
             std_graph = standardize_graph(graph, anchor)
-            
-            # Convert to DeepSnap format
             ds_graph = DSGraph(std_graph)
             processed_graphs.append(ds_graph)
-            
+
         except Exception as e:
             print(f"Warning: Error processing graph {i}: {str(e)}")
-            # Create minimal graph with basic features if conversion fails
+
+            # Safe fallback: create a minimal graph
             minimal_graph = nx.Graph()
             minimal_graph.add_nodes_from(graph.nodes())
             minimal_graph.add_edges_from(graph.edges())
             for node in minimal_graph.nodes():
                 minimal_graph.nodes[node]['node_feature'] = torch.tensor([1.0])
-            processed_graphs.append(DSGraph(minimal_graph))
-    
-    # Create batch
+
+            try:
+                ds_graph = DSGraph(minimal_graph)
+                processed_graphs.append(ds_graph)
+            except Exception as fallback_e:
+                print(f"Failed to convert fallback graph {i}: {fallback_e}")
+                continue  # skip this graph
+
+    # Create batch and augment
     batch = Batch.from_data_list(processed_graphs)
-    
-    # Suppress the specific warning during augmentation
+
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', message='Unknown type of key*')
-        batch = augmenter.augment(batch)
-    
+        try:
+            batch = augmenter.augment(batch)
+        except Exception as e:
+            print(f"Augmentation failed: {e}")
+
     return batch.to(get_device())
 
 def get_device():
