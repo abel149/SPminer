@@ -13,7 +13,8 @@ import random
 import scipy.stats as stats
 from tqdm import tqdm
 import warnings
-
+from torch_geometric.data import Batch
+from deepsnap.hetero_graph import HeteroGraph  # or DSGraph, based on your setup
 from common import feature_preprocess
 
 
@@ -273,8 +274,7 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
     
     return g
 def batch_nx_graphs(graphs, anchors=None):
-    from torch_geometric.data import Batch
-    from deepsnap.hetero_graph import HeteroGraph  # or DSGraph, based on your setup
+
 
     augmenter = feature_preprocess.FeatureAugment()
     processed_graphs = []
@@ -288,11 +288,11 @@ def batch_nx_graphs(graphs, anchors=None):
         try:
             # Clean node attributes
             for node in graph.nodes():
-                graph.nodes[node] = clean_attributes(graph.nodes[node])
+                graph.nodes[node].update(clean_attributes(graph.nodes[node]))
 
             # Clean edge attributes
             for u, v in graph.edges():
-                graph.edges[u, v] = clean_attributes(graph.edges[u, v])
+                graph.edges[u, v].update(clean_attributes(graph.edges[u, v]))
 
             std_graph = standardize_graph(graph, anchor)
             ds_graph = DSGraph(std_graph)
