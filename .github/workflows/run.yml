@@ -59,7 +59,7 @@ jobs:
               echo 'Starting decoder run...'
               python -m subgraph_mining.decoder \
                 --dataset=graph.pkl \
-                --n_trials 100 \
+                --n_trials 50 \
                 --node_anchored \
                 --out_path=/app/results/patterns.pkl
               echo 'Checking output directories...'
