@@ -130,7 +130,8 @@ def pattern_growth(dataset, task, args):
 
     if task == "graph-labeled":
         dataset, labels = dataset
-
+ 
+ 
     neighs_pyg, neighs = [], []
     print(len(dataset), "graphs")
     print("search strategy:", args.search_strategy)
