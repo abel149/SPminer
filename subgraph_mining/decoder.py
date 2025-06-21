@@ -176,10 +176,8 @@ def pattern_growth(dataset, task, args):
                         orig_attrs = {n: subgraph.nodes[n].copy() for n in subgraph.nodes()}
 
                         def clean_edge_attrs(attrs):
-                            return {k: v for k, v in attrs.items() if isinstance(k, str) and isinstance(v, (int, float, str))}
-
-                        def clean_node_attrs(attrs):
-                            return {k: v for k, v in attrs.items() if isinstance(k, str) and isinstance(v, (int, float, str))}
+                                # Remove keys that are not strings and values that are not serializable
+                                return {str(k): v for k, v in attrs.items() if isinstance(k, str) and isinstance(v, (int, float, str))}
 
                         # Clean edge attributes
                         edge_attrs = {}
@@ -202,7 +200,8 @@ def pattern_growth(dataset, task, args):
                         # Re-apply cleaned edge attributes (after clearing)
                         for (old_u, old_v), attrs in edge_attrs.items():
                             subgraph.edges[mapping[old_u], mapping[old_v]].clear()
-                            subgraph.edges[mapping[old_u], mapping[old_v]].update(attrs)
+                            subgraph.edges[mapping[old_u], mapping[old_v]].update(clean_edge_attrs(attrs))
+                           
 
                         # Add safe self-loop edge for anchor
                         subgraph.add_edge(0, 0, type="self", weight=1.0)
