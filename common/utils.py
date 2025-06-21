@@ -267,14 +267,12 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
 
     return g
 def batch_nx_graphs(graphs, anchors=None):
-
-
+    
     augmenter = feature_preprocess.FeatureAugment()
     processed_graphs = []
 
     def clean_attributes(attrs):
-        if not isinstance(attrs, dict):
-            return {}
+        # Ensure keys are strings and values are int, float, or string
         return {
             str(k): v for k, v in attrs.items()
             if isinstance(k, str) and isinstance(v, (int, float, str))
@@ -283,28 +281,26 @@ def batch_nx_graphs(graphs, anchors=None):
     for i, graph in enumerate(graphs):
         anchor = anchors[i] if anchors is not None else None
         try:
-            # Safely clean node attributes
+            # Clean and reset node attributes
             for node in graph.nodes():
-                attrs = graph.nodes[node]
-                cleaned = clean_attributes(attrs)
+                node_attrs = clean_attributes(graph.nodes[node])
                 graph.nodes[node].clear()
-                graph.nodes[node].update(cleaned)
+                graph.nodes[node].update(node_attrs)
 
-            # Safely clean edge attributes
+            # Clean and reset edge attributes
             for u, v in graph.edges():
-                attrs = graph.edges[u, v]
-                cleaned = clean_attributes(attrs)
+                edge_attrs = clean_attributes(graph.edges[u, v])
                 graph.edges[u, v].clear()
-                graph.edges[u, v].update(cleaned)
+                graph.edges[u, v].update(edge_attrs)
 
+            # Standardize after cleaning
             std_graph = standardize_graph(graph, anchor)
-            ds_graph = DSGraph(std_graph)
-            processed_graphs.append(ds_graph)
+            processed_graphs.append(DSGraph(std_graph))
 
         except Exception as e:
             print(f"Warning: Error processing graph {i}: {str(e)}")
 
-            # Fallback to minimal graph
+            # Safe fallback minimal graph
             minimal_graph = nx.Graph()
             minimal_graph.add_nodes_from(graph.nodes())
             minimal_graph.add_edges_from(graph.edges())
@@ -317,9 +313,9 @@ def batch_nx_graphs(graphs, anchors=None):
                 processed_graphs.append(ds_graph)
             except Exception as fallback_e:
                 print(f"Failed to convert fallback graph {i}: {fallback_e}")
-                continue
+                continue  # skip this graph entirely
 
-    # Create batch and augment
+    # Create batch and apply augmentation
     batch = Batch.from_data_list(processed_graphs)
 
     with warnings.catch_warnings():
