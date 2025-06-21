@@ -314,7 +314,7 @@ class GreedySearchAgent(SearchAgent):
                 if len(neigh) >= self.max_pattern_size or not frontier: continue
                 cand_neighs, anchors = [], []
                 for cand_node in frontier:
-                    cand_neigh = graph.subgraph(neigh + [cand_node])
+                    cand_neigh = graph.subgraph(neigh + [cand_node]).copy()
                     cand_neighs.append(cand_neigh)
                     if self.node_anchored:
                         anchors.append(neigh[0])
