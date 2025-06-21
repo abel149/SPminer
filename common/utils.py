@@ -224,54 +224,47 @@ def build_optimizer(args, params):
     return scheduler, optimizer
 
 def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
-    """
-    Standardize graph attributes to ensure compatibility with DeepSnap.
-    
-    Args:
-        graph: Input NetworkX graph
-        anchor: Optional anchor node index
-        
-    Returns:
-        NetworkX graph with standardized attributes
-    """
+
     g = graph.copy()
-    
-    # Standardize edge attributes
+
+    # Standardize and clean edge attributes
     for u, v in g.edges():
-        edge_data = g.edges[u, v]
-        # Ensure weight exists
-        if 'weight' not in edge_data:
-            edge_data['weight'] = 1.0
+        raw_attrs = g.edges[u, v]
+        clean_attrs = {k: v for k, v in raw_attrs.items() if isinstance(k, str) and isinstance(v, (int, float, str))}
+        g.edges[u, v].clear()
+        g.edges[u, v].update(clean_attrs)
+
+        # Ensure weight
+        if 'weight' not in g.edges[u, v]:
+            g.edges[u, v]['weight'] = 1.0
         else:
             try:
-                edge_data['weight'] = float(edge_data['weight'])
+                g.edges[u, v]['weight'] = float(g.edges[u, v]['weight'])
             except (ValueError, TypeError):
-                edge_data['weight'] = 1.0
-        
-        # Handle edge type
-        if 'type' in edge_data:
-            edge_data['type_str'] = str(edge_data['type'])
-            edge_data['type'] = float(hash(str(edge_data['type'])) % 1000)
-    
+                g.edges[u, v]['weight'] = 1.0
+
+        # Hash and store edge type
+        if 'type' in g.edges[u, v]:
+            edge_type = str(g.edges[u, v]['type'])
+            g.edges[u, v]['type_str'] = edge_type
+            g.edges[u, v]['type'] = float(hash(edge_type) % 1000)
+
     # Standardize node attributes
     for node in g.nodes():
         node_data = g.nodes[node]
-        
-        # Initialize node features if needed
+
         if anchor is not None:
-            node_data['node_feature'] = torch.tensor([float(node == anchor)])
+            node_data['node_feature'] = torch.tensor([float(node == anchor)], dtype=torch.float32)
         elif 'node_feature' not in node_data:
-            # Default feature if no anchor specified
-            node_data['node_feature'] = torch.tensor([1.0])
-            
-        # Ensure label exists
+            node_data['node_feature'] = torch.tensor([1.0], dtype=torch.float32)
+
         if 'label' not in node_data:
             node_data['label'] = str(node)
-            
-        # Ensure id exists
+
         if 'id' not in node_data:
+
             node_data['id'] = str(node)
-    
+
     return g
 def batch_nx_graphs(graphs, anchors=None):
 
@@ -280,19 +273,29 @@ def batch_nx_graphs(graphs, anchors=None):
     processed_graphs = []
 
     def clean_attributes(attrs):
-        # Keep only simple key-value types
-        return {k: v for k, v in attrs.items() if isinstance(k, str) and isinstance(v, (int, float, str))}
+        if not isinstance(attrs, dict):
+            return {}
+        return {
+            str(k): v for k, v in attrs.items()
+            if isinstance(k, str) and isinstance(v, (int, float, str))
+        }
 
     for i, graph in enumerate(graphs):
         anchor = anchors[i] if anchors is not None else None
         try:
-            # Clean node attributes
+            # Safely clean node attributes
             for node in graph.nodes():
-                graph.nodes[node].update(clean_attributes(graph.nodes[node]))
+                attrs = graph.nodes[node]
+                cleaned = clean_attributes(attrs)
+                graph.nodes[node].clear()
+                graph.nodes[node].update(cleaned)
 
-            # Clean edge attributes
+            # Safely clean edge attributes
             for u, v in graph.edges():
-                graph.edges[u, v].update(clean_attributes(graph.edges[u, v]))
+                attrs = graph.edges[u, v]
+                cleaned = clean_attributes(attrs)
+                graph.edges[u, v].clear()
+                graph.edges[u, v].update(cleaned)
 
             std_graph = standardize_graph(graph, anchor)
             ds_graph = DSGraph(std_graph)
@@ -301,7 +304,7 @@ def batch_nx_graphs(graphs, anchors=None):
         except Exception as e:
             print(f"Warning: Error processing graph {i}: {str(e)}")
 
-            # Safe fallback: create a minimal graph
+            # Fallback to minimal graph
             minimal_graph = nx.Graph()
             minimal_graph.add_nodes_from(graph.nodes())
             minimal_graph.add_edges_from(graph.edges())
@@ -309,11 +312,12 @@ def batch_nx_graphs(graphs, anchors=None):
                 minimal_graph.nodes[node]['node_feature'] = torch.tensor([1.0])
 
             try:
+
                 ds_graph = DSGraph(minimal_graph)
                 processed_graphs.append(ds_graph)
             except Exception as fallback_e:
                 print(f"Failed to convert fallback graph {i}: {fallback_e}")
-                continue  # skip this graph
+                continue
 
     # Create batch and augment
     batch = Batch.from_data_list(processed_graphs)
@@ -326,6 +330,8 @@ def batch_nx_graphs(graphs, anchors=None):
             print(f"Augmentation failed: {e}")
 
     return batch.to(get_device())
+
+
 
 def get_device():
     """Get PyTorch device (GPU if available, otherwise CPU)"""
