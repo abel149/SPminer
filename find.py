@@ -18,7 +18,7 @@ data_cleaned = {
     "nodes": list(G.nodes(data=True)),
     "edges": list(G.edges(data=True))
 }
-with open("cleaned_fixed_graph.pkl", "wb") as f:
+with open("graph2.pkl", "wb") as f:
     pickle.dump(data_cleaned, f)
 
 print("✅ Cleaned graph saved in expected format as 'cleaned_fixed_graph.pkl'")
