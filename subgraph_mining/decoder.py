@@ -179,6 +179,9 @@ def pattern_growth(dataset, task, args):
                         def clean_edge_attrs(attrs):
                                 # Remove keys that are not strings and values that are not serializable
                                 return {str(k): v for k, v in attrs.items() if isinstance(k, str) and isinstance(v, (int, float, str))}
+                        def clean_node_attrs(attrs):
+                            return {k: v for k, v in attrs.items() if isinstance(k, str) and isinstance(v, (int, float, str))}
+
 
                         # Clean edge attributes
                         edge_attrs = {}
