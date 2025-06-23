@@ -177,8 +177,15 @@ def pattern_growth(dataset, task, args):
                         orig_attrs = {n: subgraph.nodes[n].copy() for n in subgraph.nodes()}
 
                         def clean_edge_attrs(attrs):
-                                # Remove keys that are not strings and values that are not serializable
-                                return {str(k): v for k, v in attrs.items() if isinstance(k, str) and isinstance(v, (int, float, str))}
+                            clean_attrs = {}
+                            for k, v in attrs.items():
+                                try:
+                                    if isinstance(k, str) and isinstance(v, (int, float, str)):
+                                        clean_attrs[k] = v
+                                except Exception as e:
+                                    print(f"Skipping edge attribute with bad key {k}: {e}")
+                            return clean_attrs
+
                         def clean_node_attrs(attrs):
                             return {k: v for k, v in attrs.items() if isinstance(k, str) and isinstance(v, (int, float, str))}
 
@@ -279,7 +286,13 @@ def pattern_growth(dataset, task, args):
             analyze=args.analyze, model_type=args.method_type,
             out_batch_size=args.out_batch_size, beam_width=args.beam_width)
     out_graphs = agent.run_search(args.n_trials)
-    
+    # Ensure all nodes have 'id' and 'label' attributes
+    for i, pattern in enumerate(out_graphs):
+        for n in pattern.nodes():
+            pattern.nodes[n].setdefault('id', str(n))
+            pattern.nodes[n].setdefault('label', 'unknown')
+
+
     print(time.time() - start_time, "TOTAL TIME")
     x = int(time.time() - start_time)
     print(x // 60, "mins", x % 60, "secs")

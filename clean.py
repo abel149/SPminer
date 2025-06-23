@@ -1,37 +1,37 @@
 import pickle
 import networkx as nx
 
-def clean_edge_attrs(attrs):
-    return {str(k): v for k, v in attrs.items() if isinstance(k, str) and isinstance(v, (int, float, str))}
-
-def clean_node_attrs(attrs):
-    return {str(k): v for k, v in attrs.items() if isinstance(k, str) and isinstance(v, (int, float, str))}
-
-with open("graph.pkl", "rb") as f:
+# Load your cleaned .pkl file
+with open("graph3.pkl", "rb") as f:
     data = pickle.load(f)
 
-graph = nx.Graph()
-graph.add_nodes_from(data['nodes'])
-graph.add_edges_from(data['edges'])
+# Convert if needed
+if isinstance(data, dict) and "nodes" in data and "edges" in data:
+    G = nx.Graph()
+    G.add_nodes_from(data["nodes"])
+    G.add_edges_from(data["edges"])
+else:
+    G = data if isinstance(data, nx.Graph) else None
 
-# Clean node attributes
-for node in graph.nodes():
-    attrs = graph.nodes[node]
-    graph.nodes[node].clear()
-    graph.nodes[node].update(clean_node_attrs(attrs))
+if not isinstance(G, nx.Graph):
+    print("❌ Not a valid NetworkX graph.")
+    exit()
 
-# Clean edge attributes
-for u, v in graph.edges():
-    attrs = graph.edges[u, v]
-    graph.edges[u, v].clear()
-    graph.edges[u, v].update(clean_edge_attrs(attrs))
+print("✅ Loaded NetworkX graph.")
+print("Checking edge attributes...\n")
 
-# Save the cleaned graph to a new pkl
-with open("cleaned_graph.pkl", "wb") as f:
-    cleaned_data = {
-        "nodes": list(graph.nodes(data=True)),
-        "edges": list(graph.edges(data=True))
-    }
-    pickle.dump(cleaned_data, f)
+empty_count = 0
+for u, v, attrs in G.edges(data=True):
+    if not attrs or not isinstance(attrs, dict) or attrs == {}:
+        print(f"⚠️ Edge ({u}, {v}) has EMPTY attributes: {attrs}")
+        empty_count += 1
+    else:
+        missing_keys = []
+        if 'type' not in attrs:
+            missing_keys.append('type')
+        if 'weight' not in attrs:
+            missing_keys.append('weight')
+        if missing_keys:
+            print(f"⚠️ Edge ({u}, {v}) missing keys: {missing_keys}")
 
-print("✅ Cleaned graph saved to cleaned_graph.pkl")
+print(f"\n✅ Done. Total edges with empty or missing attributes: {empty_count}")
