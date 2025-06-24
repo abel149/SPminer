@@ -290,6 +290,8 @@ def batch_nx_graphs(graphs, anchors=None):
             # Clean edge attributes
             for u, v in graph.edges():
                 attrs = clean_attributes(graph.edges[u, v])
+                if not attrs:
+                    attrs['feat'] = torch.tensor([1.0])
                 graph.edges[u, v].clear()
                 graph.edges[u, v].update(attrs)
 
