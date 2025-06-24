@@ -1,5 +1,5 @@
 from collections import defaultdict, Counter
-from common.feature_preprocess import FeatureAugment
+
 
 from deepsnap.graph import Graph as DSGraph
 from deepsnap.batch import Batch
@@ -16,8 +16,8 @@ from tqdm import tqdm
 import warnings
 from torch_geometric.data import Batch
 from deepsnap.hetero_graph import HeteroGraph  # or DSGraph, based on your setup
-from common import feature_preprocess
-
+from common import feature_preprocess 
+from feature_preprocess import FeatureAugment
 
 def sample_neigh(graphs, size):
     ps = np.array([len(g) for g in graphs], dtype=np.float)
