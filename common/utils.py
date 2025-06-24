@@ -1,5 +1,6 @@
 from collections import defaultdict, Counter
-from feature_preprocess import FeatureAugment
+from common.feature_preprocess import FeatureAugment
+
 from deepsnap.graph import Graph as DSGraph
 from deepsnap.batch import Batch
 from deepsnap.dataset import GraphDataset
