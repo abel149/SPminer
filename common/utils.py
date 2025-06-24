@@ -16,7 +16,8 @@ from tqdm import tqdm
 import warnings
 from torch_geometric.data import Batch
 from deepsnap.hetero_graph import HeteroGraph  # or DSGraph, based on your setup
-from common.feature_preprocess import FeatureAugment
+from common import feature_preprocess
+
 
 def sample_neigh(graphs, size):
     ps = np.array([len(g) for g in graphs], dtype=np.float)
@@ -227,11 +228,10 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
 
     g = graph.copy()
 
-
+    # Standardize and clean edge attributes
     for u, v in g.edges():
         raw_attrs = g.edges[u, v]
-        clean_attrs = {k: v for k, v in raw_attrs.items()
-                       if isinstance(k, str) and isinstance(v, (int, float, str))}
+        clean_attrs = {k: v for k, v in raw_attrs.items() if isinstance(k, str) and isinstance(v, (int, float, str))}
         g.edges[u, v].clear()
         g.edges[u, v].update(clean_attrs)
 
@@ -250,8 +250,7 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
             g.edges[u, v]['type_str'] = edge_type
             g.edges[u, v]['type'] = float(hash(edge_type) % 1000)
 
-        # ✅ Add 'feat' field explicitly
-        g.edges[u, v]['feat'] = torch.tensor([g.edges[u, v]['weight']], dtype=torch.float32)
+
 
     # Standardize node attributes
     for node in g.nodes():
@@ -274,53 +273,66 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
 
 def batch_nx_graphs(graphs, anchors=None):
 
-    augmenter = FeatureAugment()
+    augmenter = feature_preprocess.FeatureAugment()
     processed_graphs = []
 
-
+    def clean_attributes(attrs):
+        # Remove keys that are not strings or are empty strings
+        return {
+            str(k): v for k, v in attrs.items()
+            if isinstance(k, str) and k.strip() != "" and isinstance(v, (int, float, str))
+        }
 
     for i, graph in enumerate(graphs):
         anchor = anchors[i] if anchors is not None else None
 
         try:
-            # ✅ Standardize the graph with cleaned attributes and required features
+            # Clean node attributes
+            for node in graph.nodes():
+                attrs = clean_attributes(graph.nodes[node])
+                graph.nodes[node].clear()
+                graph.nodes[node].update(attrs)
+
+            # Clean edge attributes
+            for u, v in graph.edges():
+                attrs = clean_attributes(graph.edges[u, v])
+                graph.edges[u, v].clear()
+                graph.edges[u, v].update(attrs)
+
+            # Standardize and convert to DSGraph
             std_graph = standardize_graph(graph, anchor)
             ds_graph = DSGraph(std_graph)
             processed_graphs.append(ds_graph)
 
         except Exception as e:
-            print(f"[FALLBACK] standardize_graph failed on graph {i} (anchor={anchor}): {e}")
-
-            # 🔁 Fallback minimal graph with default features
-            fallback_graph = nx.Graph()
-            fallback_graph.add_nodes_from(graph.nodes())
-            fallback_graph.add_edges_from(graph.edges())
-
-            for node in fallback_graph.nodes():
-                fallback_graph.nodes[node]['node_feature'] = torch.tensor([1.0], dtype=torch.float32)
-
-            for u, v in fallback_graph.edges():
-                fallback_graph.edges[u, v]['feat'] = torch.tensor([1.0], dtype=torch.float32)
+            print(f"Warning: Error processing graph {i}: {str(e)}")
+            # Fallback: create a minimal safe graph
+            minimal_graph = nx.Graph()
+            minimal_graph.add_nodes_from(graph.nodes())
+            minimal_graph.add_edges_from(graph.edges())
+            for node in minimal_graph.nodes():
+                minimal_graph.nodes[node]['node_feature'] = torch.tensor([1.0])
 
             try:
-                ds_graph = DSGraph(fallback_graph)
+
+                ds_graph = DSGraph(minimal_graph)
                 processed_graphs.append(ds_graph)
             except Exception as fallback_e:
-                print(f"[ERROR] Could not convert fallback graph {i}: {fallback_e}")
+                print(f"Failed to convert fallback graph {i}: {fallback_e}")
                 continue
 
-    if not processed_graphs:
-        raise ValueError("No graphs successfully processed.")
+    # Create and augment batch
+    batch = Batch.from_data_list(processed_graphs)
 
-    # 🧪 Suppress known warnings from PyTorch Geometric if edge keys are safe
+
+
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', message='Unknown type of key*')
         try:
-            batch = Batch.from_data_list(processed_graphs)
+
             batch = augmenter.augment(batch)
         except Exception as e:
-            print(f"[ERROR] Failed to batch or augment: {e}")
-            raise e
+            print(f"Augmentation failed: {e}")
 
     return batch.to(get_device())
 
