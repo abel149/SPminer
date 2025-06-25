@@ -326,8 +326,9 @@ def count_graphlets(queries, targets, args):
     #query_stats = [compute_graph_stats(q) for q in queries]
     #changed to multiprocessing using 
     with Pool(processes=args.n_workers) as pool:
+
         target_stats = pool.map(compute_graph_stats, targets)
-    with Pool(processes=args.n_workers) as pool:
+        
         query_stats = pool.map(compute_graph_stats, queries)
     
     # Generate work items with filtering
@@ -477,6 +478,11 @@ def gen_baseline_queries(queries, targets, method="radial", node_anchored=False)
     
     return results
 
+def convert_to_networkx(graph):
+    if isinstance(graph, nx.Graph):
+        return graph
+    return pyg_utils.to_networkx(graph).to_undirected()
+    
 def main():
     global args
     args = arg_parse()
@@ -532,11 +538,7 @@ def main():
         dataset = TUDataset(root='/tmp/ENZYMES', name='ENZYMES')
 
     # Convert dataset to networkx graphs with multiprocesssing.pool to make it faster for large dataset
-    def convert_to_networkx(graph):
-      if isinstance(graph, nx.Graph):
-         return graph
-      return pyg_utils.to_networkx(graph).to_undirected()
-
+    
     with Pool(processes=args.n_workers) as pool:
         targets = pool.map(convert_to_networkx, dataset)
 
