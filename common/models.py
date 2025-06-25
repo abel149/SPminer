@@ -287,4 +287,3 @@ class GINConv(pyg_nn.MessagePassing):
 
     def __repr__(self):
         return '{}(nn={})'.format(self.__class__.__name__, self.nn)
-
