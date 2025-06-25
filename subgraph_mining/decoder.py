@@ -130,8 +130,7 @@ def pattern_growth(dataset, task, args):
 
     if task == "graph-labeled":
         dataset, labels = dataset
- 
- 
+
     neighs_pyg, neighs = [], []
     print(len(dataset), "graphs")
     print("search strategy:", args.search_strategy)
@@ -157,71 +156,38 @@ def pattern_growth(dataset, task, args):
             for i, graph in enumerate(graphs):
                 print(i)
                 for j, node in enumerate(graph.nodes):
-                    if len(dataset) <= 10 and j % 100 == 0:
-                        print(i, j)
-
+                    if len(dataset) <= 10 and j % 100 == 0: print(i, j)
                     if args.use_whole_graphs:
-                        neigh = list(graph.nodes)
+                        neigh = graph.nodes
                     else:
-                        neigh = list(nx.single_source_shortest_path_length(graph, node, cutoff=args.radius).keys())
+                        neigh = list(nx.single_source_shortest_path_length(graph,
+                            node, cutoff=args.radius).keys())
                         if args.subgraph_sample_size != 0:
-                            neigh = random.sample(neigh, min(len(neigh), args.subgraph_sample_size))
-
+                            neigh = random.sample(neigh, min(len(neigh),
+                                args.subgraph_sample_size))
                     if len(neigh) > 1:
                         subgraph = graph.subgraph(neigh)
-
                         if args.subgraph_sample_size != 0:
-                            subgraph = subgraph.subgraph(max(nx.connected_components(subgraph), key=len))
-
-                        # Save original node and edge attributes
+                            subgraph = subgraph.subgraph(max(
+                                nx.connected_components(subgraph), key=len))
+                        
                         orig_attrs = {n: subgraph.nodes[n].copy() for n in subgraph.nodes()}
-
-                        def clean_edge_attrs(attrs):
-                            clean_attrs = {}
-                            for k, v in attrs.items():
-                                try:
-                                    if isinstance(k, str) and isinstance(v, (int, float, str)):
-                                        clean_attrs[k] = v
-                                except Exception as e:
-                                    print(f"Skipping edge attribute with bad key {k}: {e}")
-                            return clean_attrs
-
-                        def clean_node_attrs(attrs):
-                            return {k: v for k, v in attrs.items() if isinstance(k, str) and isinstance(v, (int, float, str))}
-
-
-                        # Clean edge attributes
-                        edge_attrs = {}
-                        for u, v in subgraph.edges():
-                            try:
-                                raw_attrs = subgraph.edges[u, v]
-                                clean_attrs = clean_edge_attrs(raw_attrs)
-                                edge_attrs[(u, v)] = clean_attrs
-                            except Exception as e:
-                                print(f"Skipping edge ({u}, {v}) due to bad attributes: {e}")
-
-                        # Relabel node indices to be 0...N
+                        edge_attrs = {(u,v): subgraph.edges[u,v].copy() 
+                                    for u,v in subgraph.edges()}
+                        
                         mapping = {old: new for new, old in enumerate(subgraph.nodes())}
                         subgraph = nx.relabel_nodes(subgraph, mapping)
-
-                        # Re-apply cleaned node attributes
+                        
                         for old, new in mapping.items():
-                            subgraph.nodes[new].update(clean_node_attrs(orig_attrs[old]))
-
-                        # Re-apply cleaned edge attributes (after clearing)
+                            subgraph.nodes[new].update(orig_attrs[old])
+                        
                         for (old_u, old_v), attrs in edge_attrs.items():
-                            subgraph.edges[mapping[old_u], mapping[old_v]].clear()
-                            subgraph.edges[mapping[old_u], mapping[old_v]].update(clean_edge_attrs(attrs))
-                           
-
-                        # Add safe self-loop edge for anchor
-                        subgraph.add_edge(0, 0, type="self", weight=1.0)
-
+                            subgraph.edges[mapping[old_u], mapping[old_v]].update(attrs)
+                        
+                        subgraph.add_edge(0, 0)
                         neighs.append(subgraph)
                         if args.node_anchored:
                             anchors.append(0)
-
-
 
         elif args.sample_method == "tree":
             start_time = time.time()
@@ -247,14 +213,7 @@ def pattern_growth(dataset, task, args):
             emb = model.emb_model(batch)
             emb = emb.to(torch.device("cpu"))
         embs.append(emb)
-    remainder = len(neighs) % args.batch_size
-    if remainder > 0:   
-        with torch.no_grad():
-            batch = utils.batch_nx_graphs(neighs[-remainder:],
-                anchors=anchors[-remainder:] if args.node_anchored else None)
-            emb = model.emb_model(batch)
-            emb = emb.to(torch.device("cpu"))
-        embs.append(emb)
+
     if args.analyze:
         embs_np = torch.stack(embs).numpy()
         plt.scatter(embs_np[:,0], embs_np[:,1], label="node neighborhood")
@@ -286,13 +245,7 @@ def pattern_growth(dataset, task, args):
             analyze=args.analyze, model_type=args.method_type,
             out_batch_size=args.out_batch_size, beam_width=args.beam_width)
     out_graphs = agent.run_search(args.n_trials)
-    # Ensure all nodes have 'id' and 'label' attributes
-    for i, pattern in enumerate(out_graphs):
-        for n in pattern.nodes():
-            pattern.nodes[n].setdefault('id', str(n))
-            pattern.nodes[n].setdefault('label', 'unknown')
-
-
+    
     print(time.time() - start_time, "TOTAL TIME")
     x = int(time.time() - start_time)
     print(x // 60, "mins", x % 60, "secs")
