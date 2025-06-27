@@ -537,10 +537,9 @@ def main():
             queries = [q for score, q in cand_patterns[10]][:200]
         dataset = TUDataset(root='/tmp/ENZYMES', name='ENZYMES')
 
-    # Convert dataset to networkx graphs with multiprocesssing.pool to make it faster for large dataset
-    
-    with Pool(processes=args.n_workers) as pool:
-        targets = pool.map(convert_to_networkx, dataset)
+    #call convert to graph function
+    targets = [convert_to_networkx(dataset[0])]
+
 
     # Load query patterns
     if args.dataset != "analyze":

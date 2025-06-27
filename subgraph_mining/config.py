@@ -65,7 +65,7 @@ def parse_decoder(parser):
         decode_thresh=0.5,
         radius=3,
         subgraph_sample_size=10,
-        sample_method="radial",
+        sample_method="tree",
         skip="learnable",
         min_pattern_size=3,
         max_pattern_size=10,
