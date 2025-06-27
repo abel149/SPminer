@@ -112,46 +112,16 @@ def arg_parse():
     return parser.parse_args()
 
 def load_networkx_graph(filepath):
-    """Load one or more NetworkX graphs from pickle file."""
+    """Load a NetworkX graph from a pickle file."""
     with open(filepath, 'rb') as f:
         data = pickle.load(f)
 
-    if isinstance(data, dict) and 'nodes' in data and 'edges' in data:
-        # Single graph in dict format
-        graphs = [data]
-    elif isinstance(data, list):
-        if all(isinstance(d, dict) and 'nodes' in d and 'edges' in d for d in data):
-            # List of graphs in dict format
-            graphs = data
-        else:
-            raise ValueError("Unsupported format: list but not of dicts with 'nodes'/'edges'")
-    else:
-        raise ValueError("Unsupported graph format in pickle file")
+    if isinstance(data, nx.Graph):
+        return [data]  # Return as list of one graph
+    elif isinstance(data, list) and all(isinstance(g, nx.Graph) for g in data):
+        return data  # Already a list of graphs
 
-    all_graphs = []
-    for g_data in graphs:
-        graph = nx.Graph()
-        for node in g_data['nodes']:
-            if isinstance(node, tuple):
-
-                node_id, attrs = node
-                graph.add_node(node_id, **attrs)
-            else:
-
-                graph.add_node(node)
-        for edge in g_data['edges']:
-
-            if len(edge) == 3:
-
-                src, dst, attrs = edge
-                graph.add_edge(src, dst, **attrs)
-            else:
-
-                src, dst = edge[:2]
-                graph.add_edge(src, dst)
-        all_graphs.append(graph)
-
-    return all_graphs
+    raise ValueError("Unsupported format: expected NetworkX graph or list of graphs.")
 
 def count_graphlets_helper(inp):
     """Worker function to count pattern occurrences with better timeout handling."""
