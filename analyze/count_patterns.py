@@ -479,7 +479,7 @@ def main():
         print(f"Loading Networkx graph from {args.dataset}")
         try:
             graph = load_networkx_graph(args.dataset)
-           # print(f"Loaded Networkx graph with {graph.number_of_nodes()} nodes and {graph.number_of_edges()} edges")
+           #print(f"Loaded Networkx graph with {graph.number_of_nodes()} nodes and {graph.number_of_edges()} edges")
             dataset = [graph]
         except Exception as e:
             print(f"Error loading graph: {str(e)}")
@@ -521,8 +521,8 @@ def main():
         dataset = TUDataset(root='/tmp/ENZYMES', name='ENZYMES')
 
     #call convert to graph function
-    targets = [convert_to_networkx(dataset[0])]
-
+    with Pool(processes=args.n_workers) as pool:
+        targets = pool.map(convert_to_networkx, dataset)
 
     # Load query patterns
     if args.dataset != "analyze":
