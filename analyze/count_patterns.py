@@ -479,7 +479,7 @@ def main():
         print(f"Loading Networkx graph from {args.dataset}")
         try:
             graph = load_networkx_graph(args.dataset)
-            print(f"Loaded Networkx graph with {graph.number_of_nodes()} nodes and {graph.number_of_edges()} edges")
+           # print(f"Loaded Networkx graph with {graph.number_of_nodes()} nodes and {graph.number_of_edges()} edges")
             dataset = [graph]
         except Exception as e:
             print(f"Error loading graph: {str(e)}")
