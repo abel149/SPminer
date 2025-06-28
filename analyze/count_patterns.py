@@ -112,16 +112,33 @@ def arg_parse():
     return parser.parse_args()
 
 def load_networkx_graph(filepath):
-    """Load a NetworkX graph from a pickle file."""
+    """Load a Networkx graph from pickle format with proper attributes handling."""
     with open(filepath, 'rb') as f:
         data = pickle.load(f)
-
-    if isinstance(data, nx.Graph):
-        return [data]  # Return as list of one graph
-    elif isinstance(data, list) and all(isinstance(g, nx.Graph) for g in data):
-        return data  # Already a list of graphs
-
-    raise ValueError("Unsupported format: expected NetworkX graph or list of graphs.")
+        graph = nx.Graph()
+        
+        # Add nodes with their attributes
+        for node in data['nodes']:
+            if isinstance(node, tuple):
+                # Format: (node_id, attribute_dict)
+                node_id, attrs = node
+                graph.add_node(node_id, **attrs)
+            else:
+                # Format: just node_id
+                graph.add_node(node)
+        
+        # Add edges with their attributes
+        for edge in data['edges']:
+            if len(edge) == 3:
+                # Format: (src, dst, attribute_dict)
+                src, dst, attrs = edge
+                graph.add_edge(src, dst, **attrs)
+            else:
+                # Format: just (src, dst)
+                src, dst = edge[:2]
+                graph.add_edge(src, dst)
+                
+        return graph
 
 def count_graphlets_helper(inp):
     """Worker function to count pattern occurrences with better timeout handling."""
