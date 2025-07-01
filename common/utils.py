@@ -292,7 +292,7 @@ def batch_nx_graphs(graphs, anchors=None):
             processed_graphs.append(ds_graph)
             
         except Exception as e:
-            print(f"Warning: Error processing graph {i}: {str(e)}")
+            #print(f"Warning: Error processing graph {i}: {str(e)}")
             # Create minimal graph with basic features if conversion fails
             minimal_graph = nx.Graph()
             minimal_graph.add_nodes_from(graph.nodes())
@@ -309,7 +309,7 @@ def batch_nx_graphs(graphs, anchors=None):
     # Suppress the specific warning during augmentation
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', message='Unknown type of key*')
-        
+
         batch = augmenter.augment(batch)
     
     return batch.to(get_device())
