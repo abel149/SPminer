@@ -277,6 +277,12 @@ def batch_nx_graphs(graphs, anchors=None):
             
         except Exception as e:
             # Create minimal fallback graph (on CPU)
+            print(
+                        f"FALLBACK ACTIVATED for graph {i} | "
+                        f"Nodes: {graph.number_of_nodes()} | "
+                        f"Edges: {graph.number_of_edges()} | "
+                        f"Error: {str(e)}"
+                   )
             minimal_graph = nx.Graph()
             minimal_graph.add_nodes_from(graph.nodes())
             minimal_graph.add_edges_from(graph.edges())
