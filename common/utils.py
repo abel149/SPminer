@@ -223,90 +223,96 @@ def build_optimizer(args, params):
     return scheduler, optimizer
 
 def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
-    """Robust standardization with edge case handling"""
-    if not isinstance(graph, nx.Graph):
-        raise ValueError("Input must be a NetworkX Graph")
-
-    # Reusable tensors
-    default_feature = torch.tensor([1.0], device='cpu')
-    anchor_feature_true = torch.tensor([1.0], device='cpu')
-    anchor_feature_false = torch.tensor([0.0], device='cpu')
-
-    # Standardize edges with protection
-    for u, v, edge_data in graph.edges(data=True):
-        # Ensure edge_data exists
-        if not isinstance(edge_data, dict):
-            edge_data = {}
-            graph.edges[u, v].update(edge_data)
-            
-        # Weight handling
-        edge_data['weight'] = float(edge_data.get('weight', 1.0))
-        
-        # Type handling
-        if 'type' in edge_data:
-            try:
-                type_str = str(edge_data['type'])
-                edge_data['type_str'] = type_str
-                edge_data['type'] = float(hash(type_str) % 1000)
-            except (TypeError, ValueError):
-                edge_data['type'] = 0.0
-
-    # Rest of your node processing remains the same...
-    return graph
-def batch_nx_graphs(graphs, anchors=None):
-    """Process and batch graphs with robust error handling and memory efficiency."""
-    processed_graphs = []
-    device = get_device()  # Get device once
+    """
+    Standardize graph attributes to ensure compatibility with DeepSnap.
     
+    Args:
+        graph: Input NetworkX graph
+        anchor: Optional anchor node index
+        
+    Returns:
+        NetworkX graph with standardized attributes
+    """
+    g = graph.copy()
+    
+    # Standardize edge attributes
+    for u, v in g.edges():
+        edge_data = g.edges[u, v]
+        # Ensure weight exists
+        if 'weight' not in edge_data:
+            edge_data['weight'] = 1.0
+        else:
+            try:
+                edge_data['weight'] = float(edge_data['weight'])
+            except (ValueError, TypeError):
+                edge_data['weight'] = 1.0
+        
+        # Handle edge type
+        if 'type' in edge_data:
+            edge_data['type_str'] = str(edge_data['type'])
+            edge_data['type'] = float(hash(str(edge_data['type'])) % 1000)
+    
+    # Standardize node attributes
+    for node in g.nodes():
+        node_data = g.nodes[node]
+        
+        # Initialize node features if needed
+        if anchor is not None:
+            node_data['node_feature'] = torch.tensor([float(node == anchor)])
+        elif 'node_feature' not in node_data:
+            # Default feature if no anchor specified
+            node_data['node_feature'] = torch.tensor([1.0])
+            
+        # Ensure label exists
+        if 'label' not in node_data:
+            node_data['label'] = str(node)
+            
+        # Ensure id exists
+        if 'id' not in node_data:
+            node_data['id'] = str(node)
+    
+    return g
+
+def batch_nx_graphs(graphs, anchors=None):
+
+
     # Initialize feature augmenter
     augmenter = feature_preprocess.FeatureAugment()
     
-
+    # Process graphs with proper attribute handling
+    processed_graphs = []
     for i, graph in enumerate(graphs):
-        # Memory management (clear cache every 10K graphs)
-        if i % 10000 == 0:
-            torch.cuda.empty_cache()
-        
+        anchor = anchors[i] if anchors is not None else None
         try:
-            # Process graph with standardized attributes
-            anchor = anchors[i] if anchors is not None else None
+            # Standardize graph attributes
             std_graph = standardize_graph(graph, anchor)
-    
+            
+            # Convert to DeepSnap format
             ds_graph = DSGraph(std_graph)
             processed_graphs.append(ds_graph)
             
         except Exception as e:
-            # Create minimal fallback graph (on CPU)
-            print(
-                        f"FALLBACK ACTIVATED for graph {i} | "
-                        f"Nodes: {graph.number_of_nodes()} | "
-                        f"Edges: {graph.number_of_edges()} | "
-                        f"Error: {str(e)}"
-                   )
+            print(f"Warning: Error processing graph {i}: {str(e)}")
+            # Create minimal graph with basic features if conversion fails
             minimal_graph = nx.Graph()
             minimal_graph.add_nodes_from(graph.nodes())
             minimal_graph.add_edges_from(graph.edges())
-            
-            # Add standardized attributes
-            for node in minimal_graph.nodes():
-                minimal_graph.nodes[node].update({
-                    'node_feature': torch.tensor([1.0], device='cpu'),  # Keep on CPU initially
-                    'label': str(node),
-                    'id': str(node)
-                })
-            
-            for u, v in minimal_graph.edges():
-                minimal_graph.edges[u, v].setdefault('weight', 1.0)
-                
-            processed_graphs.append(DSGraph(minimal_graph))
 
-    # Batch creation with warning suppression
+
+            for node in minimal_graph.nodes():
+                minimal_graph.nodes[node]['node_feature'] = torch.tensor([1.0])
+            processed_graphs.append(DSGraph(minimal_graph))
+    
+    # Create batch
+    batch = Batch.from_data_list(processed_graphs)
+    
+    # Suppress the specific warning during augmentation
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', message='Unknown type of key*')
-        batch = Batch.from_data_list(processed_graphs)
+        
         batch = augmenter.augment(batch)
     
-    return batch.to(device)  # Move to target device once at the end
+    return batch.to(get_device())
 
 def get_device():
     """Get PyTorch device (GPU if available, otherwise CPU)"""
