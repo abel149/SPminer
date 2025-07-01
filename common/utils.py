@@ -277,12 +277,19 @@ def batch_nx_graphs(graphs, anchors=None):
             processed_graphs.append(ds_graph)
             
         except Exception as e:
-            print(f"Warning: Error processing graph {i}: {str(e)}")
+            print("==== DEBUGGING GRAPH ====")
+            for u, v, d in graph.edges(data=True):
+                    for k in d.keys():
+                        if not isinstance(k, str) or k.strip() == "":
+                            print(f"BAD KEY in edge ({u},{v}): {k}")
+            raise e  # crash on purpose to debug
+            
+        print(f"Warning: Error processing graph {i}: {str(e)}")
 
-            # Fallback: Construct backup graph with structural features
-            minimal_graph = nx.Graph()
-            minimal_graph.add_nodes_from(graph.nodes())
-            minimal_graph.add_edges_from(graph.edges())
+        # Fallback: Construct backup graph with structural features
+        minimal_graph = nx.Graph()
+        minimal_graph.add_nodes_from(graph.nodes())
+        minimal_graph.add_edges_from(graph.edges())
 
         try:
             # Add structural node features like degree
