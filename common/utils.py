@@ -232,22 +232,24 @@ def clean_node_keys(graph):
         bad_keys = [k for k in list(attrs.keys()) if not isinstance(k, str) or k.strip() == ""]
         for k in bad_keys:
             del attrs[k]
+import networkx as nx
+import torch
 
 def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
     g = graph.copy()
 
-      # CLEAN EDGE KEYS again (even if done before)
+    # Robustly clean edge attribute keys
     for u, v, d in g.edges(data=True):
-        bad_keys = [k for k in list(d.keys()) if not isinstance(k, str) or str(k).strip() == ""]
-        for k in bad_keys:
-            del d[k]
+        cleaned = {
+            str(k).strip(): v for k, v in d.items()
+            if isinstance(k, str) and str(k).strip() != ""
+        }
+        g.edges[u, v].clear()
+        g.edges[u, v].update(cleaned)
+
+    # Standardize edge attributes
     for u, v in g.edges():
         edge_data = g.edges[u, v]
-
-        # Clean up invalid keys
-        keys_to_delete = [k for k in edge_data if not isinstance(k, str) or k.strip() == ""]
-        for k in keys_to_delete:
-            del edge_data[k]
 
         # Fix 'weight'
         try:
@@ -255,25 +257,39 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
         except Exception:
             edge_data['weight'] = 1.0
 
-        # Handle 'type' as a float hash for numerical stability
+        # Hash 'type' if it exists
         if 'type' in edge_data:
             edge_type = str(edge_data['type'])
             edge_data['type_str'] = edge_type
             edge_data['type'] = float(hash(edge_type) % 1000)
 
+    # Standardize node attributes
     for node in g.nodes():
         node_data = g.nodes[node]
 
+        # Anchor-based or default normalized degree-based feature
         if anchor is not None:
-            node_data['node_feature'] = torch.tensor([float(node == anchor)], dtype=torch.float32)
+            node_data['node_feature'] = torch.tensor(
+                [float(node == anchor)], dtype=torch.float32
+            )
         elif 'node_feature' not in node_data:
-            # If no explicit features, fallback to degree-based or ID-based
-            node_data['node_feature'] = torch.tensor([g.degree(node)], dtype=torch.float32)
+            deg = g.degree(node)
+            norm_deg = deg / max(1, g.number_of_nodes())
+            node_data['node_feature'] = torch.tensor(
+                [norm_deg], dtype=torch.float32
+            )
 
+        # Label and ID standardization
         node_data['label'] = str(node_data.get('label', str(node)))
         node_data['id'] = str(node_data.get('id', str(node)))
 
+    # Final check for debugging (optional)
+    for u, v, d in g.edges(data=True):
+        for k in d:
+            assert isinstance(k, str) and k.strip() != "", f"❌ Invalid edge key {repr(k)} in edge ({u},{v})"
+
     return g
+
 
 def batch_nx_graphs(graphs, anchors=None):
 
