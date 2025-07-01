@@ -221,56 +221,41 @@ def build_optimizer(args, params):
     elif args.opt_scheduler == 'cos':
         scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.opt_restart)
     return scheduler, optimizer
-
 def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
-    """
-    Standardize graph attributes to ensure compatibility with DeepSnap.
-    
-    Args:
-        graph: Input NetworkX graph
-        anchor: Optional anchor node index
-        
-    Returns:
-        NetworkX graph with standardized attributes
-    """
     g = graph.copy()
-    
-    # Standardize edge attributes
+
     for u, v in g.edges():
         edge_data = g.edges[u, v]
-        # Ensure weight exists
-        if 'weight' not in edge_data:
+
+        # Clean up invalid keys
+        keys_to_delete = [k for k in edge_data if not isinstance(k, str) or k.strip() == ""]
+        for k in keys_to_delete:
+            del edge_data[k]
+
+        # Fix 'weight'
+        try:
+            edge_data['weight'] = float(edge_data.get('weight', 1.0))
+        except Exception:
             edge_data['weight'] = 1.0
-        else:
-            try:
-                edge_data['weight'] = float(edge_data['weight'])
-            except (ValueError, TypeError):
-                edge_data['weight'] = 1.0
-        
-        # Handle edge type
+
+        # Handle 'type' as a float hash for numerical stability
         if 'type' in edge_data:
-            edge_data['type_str'] = str(edge_data['type'])
-            edge_data['type'] = float(hash(str(edge_data['type'])) % 1000)
-    
-    # Standardize node attributes
+            edge_type = str(edge_data['type'])
+            edge_data['type_str'] = edge_type
+            edge_data['type'] = float(hash(edge_type) % 1000)
+
     for node in g.nodes():
         node_data = g.nodes[node]
-        
-        # Initialize node features if needed
+
         if anchor is not None:
-            node_data['node_feature'] = torch.tensor([float(node == anchor)])
+            node_data['node_feature'] = torch.tensor([float(node == anchor)], dtype=torch.float32)
         elif 'node_feature' not in node_data:
-            # Default feature if no anchor specified
-            node_data['node_feature'] = torch.tensor([1.0])
-            
-        # Ensure label exists
-        if 'label' not in node_data:
-            node_data['label'] = str(node)
-            
-        # Ensure id exists
-        if 'id' not in node_data:
-            node_data['id'] = str(node)
-    
+            # If no explicit features, fallback to degree-based or ID-based
+            node_data['node_feature'] = torch.tensor([g.degree(node)], dtype=torch.float32)
+
+        node_data['label'] = str(node_data.get('label', str(node)))
+        node_data['id'] = str(node_data.get('id', str(node)))
+
     return g
 
 def batch_nx_graphs(graphs, anchors=None):
@@ -292,16 +277,31 @@ def batch_nx_graphs(graphs, anchors=None):
             processed_graphs.append(ds_graph)
             
         except Exception as e:
-            #print(f"Warning: Error processing graph {i}: {str(e)}")
-            # Create minimal graph with basic features if conversion fails
+            print(f"Warning: Error processing graph {i}: {str(e)}")
+
+            # Fallback: Construct backup graph with structural features
             minimal_graph = nx.Graph()
             minimal_graph.add_nodes_from(graph.nodes())
             minimal_graph.add_edges_from(graph.edges())
 
-
+        try:
+            # Add structural node features like degree
             for node in minimal_graph.nodes():
-                minimal_graph.nodes[node]['node_feature'] = torch.tensor([1.0])
-            processed_graphs.append(DSGraph(minimal_graph))
+                degree = minimal_graph.degree[node]
+                minimal_graph.nodes[node]['node_feature'] = torch.tensor([degree], dtype=torch.float32)
+                minimal_graph.nodes[node]['label'] = str(node)
+                minimal_graph.nodes[node]['id'] = str(node)
+
+            for u, v in minimal_graph.edges():
+                minimal_graph.edges[u, v]['weight'] = 1.0
+
+            ds_graph = DSGraph(minimal_graph)
+            processed_graphs.append(ds_graph)
+
+        except Exception as fallback_e:
+            print(f"Fallback graph also failed: {fallback_e}")
+            continue
+
     
     # Create batch
     batch = Batch.from_data_list(processed_graphs)
