@@ -227,10 +227,20 @@ def clean_edge_keys(graph: nx.Graph):
         bad_keys = [k for k in list(attrs.keys()) if not isinstance(k, str) or k.strip() == ""]
         for k in bad_keys:
             del attrs[k]
+def clean_node_keys(graph):
+    for node, attrs in graph.nodes(data=True):
+        bad_keys = [k for k in list(attrs.keys()) if not isinstance(k, str) or k.strip() == ""]
+        for k in bad_keys:
+            del attrs[k]
 
 def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
     g = graph.copy()
 
+      # CLEAN EDGE KEYS again (even if done before)
+    for u, v, d in g.edges(data=True):
+        bad_keys = [k for k in list(d.keys()) if not isinstance(k, str) or str(k).strip() == ""]
+        for k in bad_keys:
+            del d[k]
     for u, v in g.edges():
         edge_data = g.edges[u, v]
 
@@ -277,6 +287,7 @@ def batch_nx_graphs(graphs, anchors=None):
         anchor = anchors[i] if anchors is not None else None
         try:
             # Standardize graph attributes
+            clean_node_keys(graph)
             clean_edge_keys(graph)
 
             std_graph = standardize_graph(graph, anchor)
