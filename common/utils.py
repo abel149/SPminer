@@ -221,6 +221,13 @@ def build_optimizer(args, params):
     elif args.opt_scheduler == 'cos':
         scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.opt_restart)
     return scheduler, optimizer
+def clean_edge_keys(graph: nx.Graph):
+    """Remove invalid edge attribute keys from graph."""
+    for u, v, attrs in graph.edges(data=True):
+        bad_keys = [k for k in list(attrs.keys()) if not isinstance(k, str) or k.strip() == ""]
+        for k in bad_keys:
+            del attrs[k]
+
 def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
     g = graph.copy()
 
@@ -270,6 +277,8 @@ def batch_nx_graphs(graphs, anchors=None):
         anchor = anchors[i] if anchors is not None else None
         try:
             # Standardize graph attributes
+            clean_edge_keys(graph)
+
             std_graph = standardize_graph(graph, anchor)
             
             # Convert to DeepSnap format
