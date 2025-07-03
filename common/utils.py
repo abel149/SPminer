@@ -260,8 +260,18 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
         if len(edge_data) == 0:
             edge_data['weight'] = 1.0
 
+    
     for u, v in g.edges():
         edge_data = g.edges[u, v]
+
+        # Defensive patch: replace entire edge_data if invalid
+        if not isinstance(edge_data, dict) or any(
+            not isinstance(k, str) or str(k).strip() == "" or isinstance(k, dict)
+            for k in edge_data.keys()
+        ):
+            g.edges[u, v].clear()  # wipe the whole attribute dict
+            g.edges[u, v]['weight'] = 1.0
+            edge_data = g.edges[u, v]
 
         # Ensure 'weight' is float
         try:
@@ -269,7 +279,7 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
         except (ValueError, TypeError):
             edge_data['weight'] = 1.0
 
-        # Handle 'type'
+        # Hash 'type'
         if 'type' in edge_data:
             try:
                 edge_data['type_str'] = str(edge_data['type'])
@@ -278,32 +288,7 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
                 edge_data['type_str'] = 'unknown'
                 edge_data['type'] = 0.0
 
-    # --- Standardize node attributes ---
-    for node in g.nodes():
-        node_data = g.nodes[node]
 
-        # Node feature
-        try:
-            if anchor is not None:
-                node_data['node_feature'] = torch.tensor([float(node == anchor)])
-            elif 'node_feature' not in node_data:
-                node_data['node_feature'] = torch.tensor([1.0])
-        except Exception:
-            node_data['node_feature'] = torch.tensor([1.0])
-
-        # Label
-        if 'label' not in node_data:
-            try:
-                node_data['label'] = str(node)
-            except Exception:
-                node_data['label'] = 'unknown'
-
-        # ID
-        if 'id' not in node_data:
-            try:
-                node_data['id'] = str(node)
-            except Exception:
-                node_data['id'] = '0'
 
     return g
 
