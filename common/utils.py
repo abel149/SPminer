@@ -249,16 +249,17 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
     """
     g = graph.copy()
 
-    # --- Clean edge keys ---
+    # --- Clean edge attributes ---
     for u, v, edge_data in g.edges(data=True):
-        # Remove keys that are not strings or are empty
-        bad_keys = [k for k in list(edge_data.keys()) 
-            if not isinstance(k, str) or str(k).strip() == "" or isinstance(k, dict)]
-
+        # Remove invalid keys
+        bad_keys = [k for k in list(edge_data.keys()) if not isinstance(k, str) or str(k).strip() == "" or isinstance(k, dict)]
         for k in bad_keys:
             del edge_data[k]
 
-    # --- Standardize edge attributes ---
+        # Add default weight if edge has no valid attributes left
+        if len(edge_data) == 0:
+            edge_data['weight'] = 1.0
+
     for u, v in g.edges():
         edge_data = g.edges[u, v]
 
