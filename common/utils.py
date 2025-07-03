@@ -324,6 +324,12 @@ def batch_nx_graphs(graphs, anchors=None):
 
 
             std_graph = standardize_graph(graph, anchor)
+
+            # Debug check: look for leftover empty edge attrs
+            for u, v, d in std_graph.edges(data=True):
+                if d == {}:
+                    print(f"[ERROR] Edge ({u}, {v}) still has empty attributes!")
+
             
             # Convert to DeepSnap format
             ds_graph = DSGraph(std_graph)
