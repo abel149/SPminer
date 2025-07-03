@@ -252,7 +252,9 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
     # --- Clean edge keys ---
     for u, v, edge_data in g.edges(data=True):
         # Remove keys that are not strings or are empty
-        bad_keys = [k for k in list(edge_data.keys()) if not isinstance(k, str) or str(k).strip() == ""]
+        bad_keys = [k for k in list(edge_data.keys()) 
+            if not isinstance(k, str) or str(k).strip() == "" or isinstance(k, dict)]
+
         for k in bad_keys:
             del edge_data[k]
 
@@ -329,6 +331,9 @@ def batch_nx_graphs(graphs, anchors=None):
         except Exception as e:
             print(f"Warning: Error processing graph {i}: {str(e)}")
             # Create minimal graph with basic features if conversion fails
+            print("Edge attributes:")
+            for u, v, d in graph.edges(data=True):
+                print(f"Edge ({u}, {v}): {d}")
             minimal_graph = nx.Graph()
             minimal_graph.add_nodes_from(graph.nodes())
             minimal_graph.add_edges_from(graph.edges())
