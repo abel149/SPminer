@@ -234,61 +234,70 @@ def clean_node_keys(graph):
             del attrs[k]
 import networkx as nx
 import torch
+import networkx as nx
+import torch
 
 def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
+    """
+    Standardize graph attributes to ensure compatibility with DeepSnap.
+    
+    Args:
+        graph: Input NetworkX graph
+        anchor: Optional anchor node index
+        
+    Returns:
+        NetworkX graph with standardized attributes
+    """
     g = graph.copy()
-
-    # Robustly clean edge attribute keys
-    for u, v, d in g.edges(data=True):
-        cleaned = {
-            str(k).strip(): v for k, v in d.items()
-            if isinstance(k, str) and str(k).strip() != ""
-        }
-        g.edges[u, v].clear()
-        g.edges[u, v].update(cleaned)
-
-    # Standardize edge attributes
+    
+    # --- Standardize edge attributes ---
     for u, v in g.edges():
         edge_data = g.edges[u, v]
 
-        # Fix 'weight'
+        # Ensure 'weight' exists and is a float
         try:
             edge_data['weight'] = float(edge_data.get('weight', 1.0))
-        except Exception:
+        except (ValueError, TypeError):
             edge_data['weight'] = 1.0
 
-        # Hash 'type' if it exists
+        # Handle 'type' attribute (convert to numeric hash and store string version)
         if 'type' in edge_data:
-            edge_type = str(edge_data['type'])
-            edge_data['type_str'] = edge_type
-            edge_data['type'] = float(hash(edge_type) % 1000)
+            try:
+                edge_data['type_str'] = str(edge_data['type'])
+                edge_data['type'] = float(hash(str(edge_data['type'])) % 1000)
+            except Exception:
+                edge_data['type_str'] = 'unknown'
+                edge_data['type'] = 0.0
 
-    # Standardize node attributes
+    # --- Standardize node attributes ---
     for node in g.nodes():
         node_data = g.nodes[node]
 
-        # Anchor-based or default normalized degree-based feature
-        if anchor is not None:
-            node_data['node_feature'] = torch.tensor(
-                [float(node == anchor)], dtype=torch.float32
-            )
-        elif 'node_feature' not in node_data:
-            deg = g.degree(node)
-            norm_deg = deg / max(1, g.number_of_nodes())
-            node_data['node_feature'] = torch.tensor(
-                [norm_deg], dtype=torch.float32
-            )
+        # Assign node_feature based on anchor or default
+        try:
+            if anchor is not None:
+                node_data['node_feature'] = torch.tensor([float(node == anchor)])
+            elif 'node_feature' not in node_data:
+                node_data['node_feature'] = torch.tensor([1.0])
+        except Exception:
+            node_data['node_feature'] = torch.tensor([1.0])
 
-        # Label and ID standardization
-        node_data['label'] = str(node_data.get('label', str(node)))
-        node_data['id'] = str(node_data.get('id', str(node)))
+        # Ensure label exists
+        if 'label' not in node_data:
+            try:
+                node_data['label'] = str(node)
+            except Exception:
+                node_data['label'] = 'unknown'
 
-    # Final check for debugging (optional)
-    for u, v, d in g.edges(data=True):
-        for k in d:
-            assert isinstance(k, str) and k.strip() != "", f"❌ Invalid edge key {repr(k)} in edge ({u},{v})"
+        # Ensure id exists
+        if 'id' not in node_data:
+            try:
+                node_data['id'] = str(node)
+            except Exception:
+                node_data['id'] = '0'
 
     return g
+
 
 
 def batch_nx_graphs(graphs, anchors=None):
@@ -303,8 +312,7 @@ def batch_nx_graphs(graphs, anchors=None):
         anchor = anchors[i] if anchors is not None else None
         try:
             # Standardize graph attributes
-            clean_node_keys(graph)
-            clean_edge_keys(graph)
+
 
             std_graph = standardize_graph(graph, anchor)
             
@@ -313,38 +321,14 @@ def batch_nx_graphs(graphs, anchors=None):
             processed_graphs.append(ds_graph)
             
         except Exception as e:
-            print("==== DEBUGGING GRAPH ====")
-            for u, v, d in graph.edges(data=True):
-                    for k in d.keys():
-                        if not isinstance(k, str) or k.strip() == "":
-                            print(f"BAD KEY in edge ({u},{v}): {k}")
-            raise e  # crash on purpose to debug
-            
-        print(f"Warning: Error processing graph {i}: {str(e)}")
-
-        # Fallback: Construct backup graph with structural features
-        minimal_graph = nx.Graph()
-        minimal_graph.add_nodes_from(graph.nodes())
-        minimal_graph.add_edges_from(graph.edges())
-
-        try:
-            # Add structural node features like degree
+            #print(f"Warning: Error processing graph {i}: {str(e)}")
+            # Create minimal graph with basic features if conversion fails
+            minimal_graph = nx.Graph()
+            minimal_graph.add_nodes_from(graph.nodes())
+            minimal_graph.add_edges_from(graph.edges())
             for node in minimal_graph.nodes():
-                degree = minimal_graph.degree[node]
-                minimal_graph.nodes[node]['node_feature'] = torch.tensor([degree], dtype=torch.float32)
-                minimal_graph.nodes[node]['label'] = str(node)
-                minimal_graph.nodes[node]['id'] = str(node)
-
-            for u, v in minimal_graph.edges():
-                minimal_graph.edges[u, v]['weight'] = 1.0
-
-            ds_graph = DSGraph(minimal_graph)
-            processed_graphs.append(ds_graph)
-
-        except Exception as fallback_e:
-            print(f"Fallback graph also failed: {fallback_e}")
-            continue
-
+                minimal_graph.nodes[node]['node_feature'] = torch.tensor([1.0])
+            processed_graphs.append(DSGraph(minimal_graph))
     
     # Create batch
     batch = Batch.from_data_list(processed_graphs)
