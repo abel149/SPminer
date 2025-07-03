@@ -247,6 +247,7 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
     Returns:
         NetworkX graph with standardized attributes
     """
+    print("Standardizing graph...")
     g = graph.copy()
 
     # --- Clean edge attributes ---
@@ -310,10 +311,10 @@ def batch_nx_graphs(graphs, anchors=None):
 
             std_graph = standardize_graph(graph, anchor)
 
-            # Debug check: look for leftover empty edge attrs
+            print("STD GRAPH EDGES:")
             for u, v, d in std_graph.edges(data=True):
-                if d == {}:
-                    print(f"[ERROR] Edge ({u}, {v}) still has empty attributes!")
+                print(f"Edge ({u}, {v}): {d}")
+
 
             
             # Convert to DeepSnap format
