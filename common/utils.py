@@ -233,8 +233,7 @@ def clean_node_keys(graph):
         for k in bad_keys:
             del attrs[k]
 import networkx as nx
-import torch
-import networkx as nx
+
 import torch
 
 def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
@@ -249,18 +248,25 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
         NetworkX graph with standardized attributes
     """
     g = graph.copy()
-    
+
+    # --- Clean edge keys ---
+    for u, v, edge_data in g.edges(data=True):
+        # Remove keys that are not strings or are empty
+        bad_keys = [k for k in list(edge_data.keys()) if not isinstance(k, str) or str(k).strip() == ""]
+        for k in bad_keys:
+            del edge_data[k]
+
     # --- Standardize edge attributes ---
     for u, v in g.edges():
         edge_data = g.edges[u, v]
 
-        # Ensure 'weight' exists and is a float
+        # Ensure 'weight' is float
         try:
             edge_data['weight'] = float(edge_data.get('weight', 1.0))
         except (ValueError, TypeError):
             edge_data['weight'] = 1.0
 
-        # Handle 'type' attribute (convert to numeric hash and store string version)
+        # Handle 'type'
         if 'type' in edge_data:
             try:
                 edge_data['type_str'] = str(edge_data['type'])
@@ -273,7 +279,7 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
     for node in g.nodes():
         node_data = g.nodes[node]
 
-        # Assign node_feature based on anchor or default
+        # Node feature
         try:
             if anchor is not None:
                 node_data['node_feature'] = torch.tensor([float(node == anchor)])
@@ -282,14 +288,14 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
         except Exception:
             node_data['node_feature'] = torch.tensor([1.0])
 
-        # Ensure label exists
+        # Label
         if 'label' not in node_data:
             try:
                 node_data['label'] = str(node)
             except Exception:
                 node_data['label'] = 'unknown'
 
-        # Ensure id exists
+        # ID
         if 'id' not in node_data:
             try:
                 node_data['id'] = str(node)
@@ -321,7 +327,7 @@ def batch_nx_graphs(graphs, anchors=None):
             processed_graphs.append(ds_graph)
             
         except Exception as e:
-            #print(f"Warning: Error processing graph {i}: {str(e)}")
+            print(f"Warning: Error processing graph {i}: {str(e)}")
             # Create minimal graph with basic features if conversion fails
             minimal_graph = nx.Graph()
             minimal_graph.add_nodes_from(graph.nodes())
