@@ -235,6 +235,7 @@ def clean_node_keys(graph):
 import networkx as nx
 
 import torch
+import copy
 
 def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
     """
@@ -310,7 +311,7 @@ def batch_nx_graphs(graphs, anchors=None):
 
 
             std_graph = standardize_graph(graph, anchor)
-
+            std_graph = copy.deepcopy(std_graph)
             print("STD GRAPH EDGES:")
             for u, v, d in std_graph.edges(data=True):
                 print(f"Edge ({u}, {v}): {d}")
@@ -319,6 +320,7 @@ def batch_nx_graphs(graphs, anchors=None):
             
             # Convert to DeepSnap format
             ds_graph = DSGraph(std_graph)
+            print("Successfully created DSGraph for graph", i)
             processed_graphs.append(ds_graph)
             
         except Exception as e:
