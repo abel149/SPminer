@@ -312,12 +312,9 @@ def batch_nx_graphs(graphs, anchors=None):
 
             std_graph = standardize_graph(graph, anchor)
             std_graph = copy.deepcopy(std_graph)
-            print("STD GRAPH EDGES:")
-            for u, v, d in std_graph.edges(data=True):
-                print(f"Edge ({u}, {v}): {d}")
 
 
-            
+
             # Convert to DeepSnap format
             ds_graph = DSGraph(std_graph)
             print("Successfully created DSGraph for graph", i)
@@ -326,9 +323,7 @@ def batch_nx_graphs(graphs, anchors=None):
         except Exception as e:
             print(f"Warning: Error processing graph {i}: {str(e)}")
             # Create minimal graph with basic features if conversion fails
-            print("Edge attributes:")
-            for u, v, d in graph.edges(data=True):
-                print(f"Edge ({u}, {v}): {d}")
+            
             minimal_graph = nx.Graph()
             minimal_graph.add_nodes_from(graph.nodes())
             minimal_graph.add_edges_from(graph.edges())
