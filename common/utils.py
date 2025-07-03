@@ -241,25 +241,26 @@ import networkx as nx
 
 def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
     """
-    Clean and prepare a NetworkX graph for DeepSnap.
-    - Removes or replaces edges with bad attributes (e.g., {}).
-    - Sets weight, type, node_feature, label, and id.
+    Fully clean and standardize a graph for DeepSnap.
+    Removes or replaces any edge with bad or empty attributes (e.g. {}).
+    Handles self-loops and ensures all edges have valid 'weight' and node features.
     """
     g = graph.copy()
 
-    # Fix or remove malformed edge attributes
+    # Deep clean edges
     edges_to_update = []
     for u, v, d in g.edges(data=True):
-
+        # Detect and handle fully empty or invalid attribute dicts
         if not isinstance(d, dict) or len(d) == 0:
             edges_to_update.append((u, v, {'weight': 1.0}))
             continue
 
-        bad_keys = [k for k in list(d) if not isinstance(k, str) or str(k).strip() == "" or isinstance(k, dict)]
+        # Remove bad keys
+        bad_keys = [k for k in d if not isinstance(k, str) or str(k).strip() == "" or isinstance(k, dict)]
         for k in bad_keys:
             del d[k]
 
-
+        # Ensure 'weight' exists and is float
         if 'weight' not in d or not isinstance(d['weight'], (int, float)):
             d['weight'] = 1.0
         else:
@@ -268,7 +269,7 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
             except:
                 d['weight'] = 1.0
 
-
+        # Encode 'type' if present
         if 'type' in d:
             try:
                 d['type_str'] = str(d['type'])
@@ -277,16 +278,16 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
                 d['type_str'] = 'unknown'
                 d['type'] = 0.0
 
-    # Apply replacements
-    for u, v, new_attrs in edges_to_update:
+    # Actually remove and replace problematic edges
+    for u, v, attrs in edges_to_update:
         g.remove_edge(u, v)
-        g.add_edge(u, v, **new_attrs)
+        g.add_edge(u, v, **attrs)
 
-    # Ensure node features
+    # Clean node attributes
     for node in g.nodes():
         node_data = g.nodes[node]
 
-
+        # Node feature
         try:
             if anchor is not None:
                 node_data['node_feature'] = torch.tensor([float(node == anchor)])
@@ -295,7 +296,7 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
         except:
             node_data['node_feature'] = torch.tensor([1.0])
 
-
+        # Label and ID
         node_data['label'] = str(node_data.get('label', node))
         node_data['id'] = str(node_data.get('id', node))
 
@@ -304,32 +305,50 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
 
 
 def batch_nx_graphs(graphs, anchors=None):
-    """
-    Standardizes and batches a list of graphs for model input.
-    Handles missing features and uses DeepSnap safely.
-    """
+
+
+    # Initialize feature augmenter
+    augmenter = feature_preprocess.FeatureAugment()
+    
+    # Process graphs with proper attribute handling
     processed_graphs = []
     for i, graph in enumerate(graphs):
         anchor = anchors[i] if anchors is not None else None
         try:
-            print("Standardizing graph...")
+            # Standardize graph attributes
+
+
             std_graph = standardize_graph(graph, anchor)
-            processed_graphs.append(DSGraph(std_graph))
+            std_graph = copy.deepcopy(std_graph)
+
+
+
+            # Convert to DeepSnap format
+            ds_graph = DSGraph(std_graph)
+            print("Successfully created DSGraph for graph", i)
+            processed_graphs.append(ds_graph)
+            
         except Exception as e:
             print(f"Warning: Error processing graph {i}: {str(e)}")
-            # fallback minimal graph
+            # Create minimal graph with basic features if conversion fails
+            
             minimal_graph = nx.Graph()
             minimal_graph.add_nodes_from(graph.nodes())
             minimal_graph.add_edges_from(graph.edges())
             for node in minimal_graph.nodes():
                 minimal_graph.nodes[node]['node_feature'] = torch.tensor([1.0])
             processed_graphs.append(DSGraph(minimal_graph))
-
-    augmenter = feature_preprocess.FeatureAugment()
+    
+    # Create batch
     batch = Batch.from_data_list(processed_graphs)
-    batch = augmenter.augment(batch)
-    batch = batch.to(get_device())
-    return batch
+    
+    # Suppress the specific warning during augmentation
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', message='Unknown type of key*')
+
+        batch = augmenter.augment(batch)
+    
+    return batch.to(get_device())
 
 def get_device():
     """Get PyTorch device (GPU if available, otherwise CPU)"""
