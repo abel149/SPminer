@@ -236,61 +236,69 @@ import networkx as nx
 
 import torch
 import copy
+import torch
+import networkx as nx
 
 def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
     """
-    Standardize graph attributes to ensure compatibility with DeepSnap.
-    
-    Args:
-        graph: Input NetworkX graph
-        anchor: Optional anchor node index
-        
-    Returns:
-        NetworkX graph with standardized attributes
+    Fully clean and standardize a graph for DeepSnap.
+    Removes or replaces any edge with bad or empty attributes (e.g. {}).
+    Handles self-loops and ensures all edges have valid 'weight' and node features.
     """
-    print("Standardizing graph...")
     g = graph.copy()
 
-    # --- Clean edge attributes ---
-    for u, v, edge_data in g.edges(data=True):
-        # Remove invalid keys
-        bad_keys = [k for k in list(edge_data.keys()) if not isinstance(k, str) or str(k).strip() == "" or isinstance(k, dict)]
+    # Deep clean edges
+    edges_to_update = []
+    for u, v, d in g.edges(data=True):
+        # Detect and handle fully empty or invalid attribute dicts
+        if not isinstance(d, dict) or len(d) == 0:
+            edges_to_update.append((u, v, {'weight': 1.0}))
+            continue
+
+        # Remove bad keys
+        bad_keys = [k for k in d if not isinstance(k, str) or str(k).strip() == "" or isinstance(k, dict)]
         for k in bad_keys:
-            del edge_data[k]
+            del d[k]
 
-        # Add default weight if edge has no valid attributes left
-        if len(edge_data) == 0:
-            edge_data['weight'] = 1.0
-
-    
-    for u, v in g.edges():
-        edge_data = g.edges[u, v]
-
-        # Defensive patch: replace entire edge_data if invalid
-        if not isinstance(edge_data, dict) or any(
-            not isinstance(k, str) or str(k).strip() == "" or isinstance(k, dict)
-            for k in edge_data.keys()
-        ):
-            g.edges[u, v].clear()  # wipe the whole attribute dict
-            g.edges[u, v]['weight'] = 1.0
-            edge_data = g.edges[u, v]
-
-        # Ensure 'weight' is float
-        try:
-            edge_data['weight'] = float(edge_data.get('weight', 1.0))
-        except (ValueError, TypeError):
-            edge_data['weight'] = 1.0
-
-        # Hash 'type'
-        if 'type' in edge_data:
+        # Ensure 'weight' exists and is float
+        if 'weight' not in d or not isinstance(d['weight'], (int, float)):
+            d['weight'] = 1.0
+        else:
             try:
-                edge_data['type_str'] = str(edge_data['type'])
-                edge_data['type'] = float(hash(str(edge_data['type'])) % 1000)
-            except Exception:
-                edge_data['type_str'] = 'unknown'
-                edge_data['type'] = 0.0
+                d['weight'] = float(d['weight'])
+            except:
+                d['weight'] = 1.0
 
+        # Encode 'type' if present
+        if 'type' in d:
+            try:
+                d['type_str'] = str(d['type'])
+                d['type'] = float(hash(str(d['type'])) % 1000)
+            except:
+                d['type_str'] = 'unknown'
+                d['type'] = 0.0
 
+    # Actually remove and replace problematic edges
+    for u, v, attrs in edges_to_update:
+        g.remove_edge(u, v)
+        g.add_edge(u, v, **attrs)
+
+    # Clean node attributes
+    for node in g.nodes():
+        node_data = g.nodes[node]
+
+        # Node feature
+        try:
+            if anchor is not None:
+                node_data['node_feature'] = torch.tensor([float(node == anchor)])
+            elif 'node_feature' not in node_data:
+                node_data['node_feature'] = torch.tensor([1.0])
+        except:
+            node_data['node_feature'] = torch.tensor([1.0])
+
+        # Label and ID
+        node_data['label'] = str(node_data.get('label', node))
+        node_data['id'] = str(node_data.get('id', node))
 
     return g
 
