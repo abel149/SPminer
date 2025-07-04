@@ -235,47 +235,51 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
         NetworkX graph with standardized attributes
     """
     g = nx.Graph()
-    g.add_nodes_from(graph.nodes())
-    g.add_edges_from(graph.edges())
-   # g = graph.copy()
-    
-    # Standardize edge attributes
-    for u, v in g.edges():
-        edge_data = g.edges[u, v]
-        # Ensure weight exists
-        if 'weight' not in edge_data:
+    g.add_nodes_from(graph.nodes(data=True))
+    g.add_edges_from(graph.edges(data=True))
+
+    for u, v, edge_data in g.edges(data=True):
+        # Remove invalid keys
+        bad_keys = [k for k in list(edge_data.keys()) if not isinstance(k, str) or k.strip() == "" or isinstance(k, dict)]
+        for k in bad_keys:
+            del edge_data[k]
+
+        # Add default weight if attributes are empty
+        if len(edge_data) == 0:
             edge_data['weight'] = 1.0
-        else:
-            try:
-                edge_data['weight'] = float(edge_data['weight'])
-            except (ValueError, TypeError):
-                edge_data['weight'] = 1.0
-        
-        # Handle edge type
+
+        # Ensure 'weight' exists and is float
+        try:
+            edge_data['weight'] = float(edge_data.get('weight', 1.0))
+        except Exception:
+            edge_data['weight'] = 1.0
+
+        # Hash and convert 'type' if it exists
         if 'type' in edge_data:
-            edge_data['type_str'] = str(edge_data['type'])
-            edge_data['type'] = float(hash(str(edge_data['type'])) % 1000)
-    
-    # Standardize node attributes
-    for node in g.nodes():
-        node_data = g.nodes[node]
-        
-        # Initialize node features if needed
-        if anchor is not None:
-            node_data['node_feature'] = torch.tensor([float(node == anchor)])
-        elif 'node_feature' not in node_data:
-            # Default feature if no anchor specified
+            try:
+                edge_data['type_str'] = str(edge_data['type'])
+                edge_data['type'] = float(hash(edge_data['type_str']) % 1000)
+            except Exception:
+                edge_data['type_str'] = 'unknown'
+                edge_data['type'] = 0.0
+
+    for node, node_data in g.nodes(data=True):
+        try:
+            if anchor is not None:
+                node_data['node_feature'] = torch.tensor([float(node == anchor)])
+            elif 'node_feature' not in node_data:
+                node_data['node_feature'] = torch.tensor([1.0])
+        except Exception:
             node_data['node_feature'] = torch.tensor([1.0])
-            
-        # Ensure label exists
+
         if 'label' not in node_data:
             node_data['label'] = str(node)
-            
-        # Ensure id exists
+
         if 'id' not in node_data:
             node_data['id'] = str(node)
-    
+
     return g
+
 
 
 
