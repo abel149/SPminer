@@ -254,6 +254,7 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
         if not isinstance(d, dict) or len(d) == 0:
             edges_to_update.append((u, v, {'weight': 1.0}))
             continue
+        
 
         # Remove bad keys
         bad_keys = [k for k in d if not isinstance(k, str) or str(k).strip() == "" or isinstance(k, dict)]
