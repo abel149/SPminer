@@ -236,31 +236,34 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
     """
     g = nx.Graph()
     g.add_nodes_from(graph.nodes())
-   
-    # Copy edges but clean attributes before adding
-    for u, v, edge_data in graph.edges(data=True):
-        clean_edge_data = {}
-        for k, val in edge_data.items():
-            # Only keep string keys that are not empty and values not dict
-            if isinstance(k, str) and k.strip() != "" and not isinstance(val, dict):
-                clean_edge_data[k] = val
-        
-        # Ensure at least weight attribute
-        if 'weight' not in clean_edge_data or clean_edge_data['weight'] is None:
-            clean_edge_data['weight'] = 1.0
+    g.add_edges_from(graph.edges())
+   # g = graph.copy()
+    
+    # Standardize edge attributes
+    for u, v in g.edges():
+        edge_data = g.edges[u, v]
+
+        # Remove invalid keys
+        bad_keys = [k for k in list(edge_data.keys()) if not isinstance(k, str) or k.strip() == "" or isinstance(k, dict)]
+        for k in bad_keys:
+            del edge_data[k]
+
+        # Clean empty edge attributes if any
+        if len(edge_data) == 0:
+            edge_data['weight'] = 1.0
+        # Ensure weight exists
+        if 'weight' not in edge_data:
+            edge_data['weight'] = 1.0
         else:
             try:
-                clean_edge_data['weight'] = float(clean_edge_data['weight'])
-            except Exception:
-                clean_edge_data['weight'] = 1.0
+                edge_data['weight'] = float(edge_data['weight'])
+            except (ValueError, TypeError):
+                edge_data['weight'] = 1.0
         
-        # Handle 'type' attribute
-        if 'type' in clean_edge_data:
-            clean_edge_data['type_str'] = str(clean_edge_data['type'])
-            clean_edge_data['type'] = float(hash(clean_edge_data['type_str']) % 1000)
-        
-        g.add_edge(u, v, **clean_edge_data)
-    
+        # Handle edge type
+        if 'type' in edge_data:
+            edge_data['type_str'] = str(edge_data['type'])
+            edge_data['type'] = float(hash(str(edge_data['type'])) % 1000)
     
     # Standardize node attributes
     for node in g.nodes():
