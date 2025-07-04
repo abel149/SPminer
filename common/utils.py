@@ -18,7 +18,7 @@ from common import feature_preprocess
 
 
 def sample_neigh(graphs, size):
-    ps = np.array([len(g) for g in graphs], dtype=np.float)
+    ps = np.array([len(g) for g in graphs], dtype=float)
     ps /= np.sum(ps)
     dist = stats.rv_discrete(values=(np.arange(len(graphs)), ps))
     while True:
@@ -53,14 +53,14 @@ def vec_hash(v):
 
 def wl_hash(g, dim=64, node_anchored=False):
     g = nx.convert_node_labels_to_integers(g)
-    vecs = np.zeros((len(g), dim), dtype=np.int)
+    vecs = np.zeros((len(g), dim), dtype=int)
     if node_anchored:
         for v in g.nodes:
             if g.nodes[v]["anchor"] == 1:
                 vecs[v] = 1
                 break
     for i in range(len(g)):
-        newvecs = np.zeros((len(g), dim), dtype=np.int)
+        newvecs = np.zeros((len(g), dim), dtype=int)
         for n in g.nodes:
             newvecs[n] = vec_hash(np.sum(vecs[list(g.neighbors(n)) + [n]],
                 axis=0))
@@ -221,86 +221,60 @@ def build_optimizer(args, params):
     elif args.opt_scheduler == 'cos':
         scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.opt_restart)
     return scheduler, optimizer
-def clean_edge_keys(graph: nx.Graph):
-    """Remove invalid edge attribute keys from graph."""
-    for u, v, attrs in graph.edges(data=True):
-        bad_keys = [k for k in list(attrs.keys()) if not isinstance(k, str) or k.strip() == ""]
-        for k in bad_keys:
-            del attrs[k]
-def clean_node_keys(graph):
-    for node, attrs in graph.nodes(data=True):
-        bad_keys = [k for k in list(attrs.keys()) if not isinstance(k, str) or k.strip() == ""]
-        for k in bad_keys:
-            del attrs[k]
-import networkx as nx
 
-import torch
-import copy
-import torch
-import networkx as nx
 
 def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
     """
-    Fully clean and standardize a graph for DeepSnap.
-    Removes or replaces any edge with bad or empty attributes (e.g. {}).
-    Handles self-loops and ensures all edges have valid 'weight' and node features.
-    """
-    g = graph.copy()
-
-    # Deep clean edges
-    edges_to_update = []
-    for u, v, d in g.edges(data=True):
-        # Detect and handle fully empty or invalid attribute dicts
-        if not isinstance(d, dict) or len(d) == 0:
-            edges_to_update.append((u, v, {'weight': 1.0}))
-            continue
+    Standardize graph attributes to ensure compatibility with DeepSnap.
+    
+    Args:
+        graph: Input NetworkX graph
+        anchor: Optional anchor node index
         
-
-        # Remove bad keys
-        bad_keys = [k for k in d if not isinstance(k, str) or str(k).strip() == "" or isinstance(k, dict)]
-        for k in bad_keys:
-            del d[k]
-
-        # Ensure 'weight' exists and is float
-        if 'weight' not in d or not isinstance(d['weight'], (int, float)):
-            d['weight'] = 1.0
+    Returns:
+        NetworkX graph with standardized attributes
+    """
+    g = nx.Graph()
+    g.add_nodes_from(graph.nodes())
+    g.add_edges_from(graph.edges())
+   # g = graph.copy()
+    
+    # Standardize edge attributes
+    for u, v in g.edges():
+        edge_data = g.edges[u, v]
+        # Ensure weight exists
+        if 'weight' not in edge_data:
+            edge_data['weight'] = 1.0
         else:
             try:
-                d['weight'] = float(d['weight'])
-            except:
-                d['weight'] = 1.0
-
-        # Encode 'type' if present
-        if 'type' in d:
-            try:
-                d['type_str'] = str(d['type'])
-                d['type'] = float(hash(str(d['type'])) % 1000)
-            except:
-                d['type_str'] = 'unknown'
-                d['type'] = 0.0
-
-    # Actually remove and replace problematic edges
-    for u, v, attrs in edges_to_update:
-        g.remove_edge(u, v)
-        g.add_edge(u, v, **attrs)
-
-    # Clean node attributes
+                edge_data['weight'] = float(edge_data['weight'])
+            except (ValueError, TypeError):
+                edge_data['weight'] = 1.0
+        
+        # Handle edge type
+        if 'type' in edge_data:
+            edge_data['type_str'] = str(edge_data['type'])
+            edge_data['type'] = float(hash(str(edge_data['type'])) % 1000)
+    
+    # Standardize node attributes
     for node in g.nodes():
         node_data = g.nodes[node]
-
-        # Node feature
-        try:
-            if anchor is not None:
-                node_data['node_feature'] = torch.tensor([float(node == anchor)])
-            elif 'node_feature' not in node_data:
-                node_data['node_feature'] = torch.tensor([1.0])
-        except:
+        
+        # Initialize node features if needed
+        if anchor is not None:
+            node_data['node_feature'] = torch.tensor([float(node == anchor)])
+        elif 'node_feature' not in node_data:
+            # Default feature if no anchor specified
             node_data['node_feature'] = torch.tensor([1.0])
-
-        # Label and ID
-        node_data['label'] = str(node_data.get('label', node))
-        node_data['id'] = str(node_data.get('id', node))
-
+            
+        # Ensure label exists
+        if 'label' not in node_data:
+            node_data['label'] = str(node)
+            
+        # Ensure id exists
+        if 'id' not in node_data:
+            node_data['id'] = str(node)
+    
     return g
 
 
@@ -320,19 +294,15 @@ def batch_nx_graphs(graphs, anchors=None):
 
 
             std_graph = standardize_graph(graph, anchor)
-            std_graph = copy.deepcopy(std_graph)
-
-
-
+            
             # Convert to DeepSnap format
             ds_graph = DSGraph(std_graph)
-            print("Successfully created DSGraph for graph", i)
+
             processed_graphs.append(ds_graph)
             
         except Exception as e:
-            print(f"Warning: Error processing graph {i}: {str(e)}")
+            #print(f"Warning: Error processing graph {i}: {str(e)}")
             # Create minimal graph with basic features if conversion fails
-            
             minimal_graph = nx.Graph()
             minimal_graph.add_nodes_from(graph.nodes())
             minimal_graph.add_edges_from(graph.edges())
