@@ -234,9 +234,10 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
     Returns:
         NetworkX graph with standardized attributes
     """
-    g = nx.Graph()
-    g.add_nodes_from(graph.nodes())
-    g.add_edges_from(graph.edges())
+    g = graph
+   # g = nx.Graph()
+    #g.add_nodes_from(graph.nodes())
+    #g.add_edges_from(graph.edges())
    # g = graph.copy()
     
     # Standardize edge attributes
