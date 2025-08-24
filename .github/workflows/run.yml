@@ -70,7 +70,7 @@ jobs:
               set -e
               echo 'Starting decoder run...'
               python -m subgraph_mining.decoder \
-                --dataset=new.pkl \
+                --dataset=u.pkl \
                 --n_trials=50 \
                 --node_anchored \
                 --out_path=/app/results/patterns.pkl
